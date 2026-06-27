@@ -1,0 +1,7 @@
+{
+  "github_repo": "elantoblandon/SistemaPos",
+  "pos_exe": "SistemaPos.exe",
+  "asset_name_contains": "SistemaPos",
+  "allow_prereleases": false,
+  "skip_update_check": false
+}

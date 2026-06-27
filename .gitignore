@@ -1,0 +1,33 @@
+# Datos del cliente
+*.db
+backups/
+facturas/
+cierres_pdf/
+assets/
+
+# Builds y ejecutables generados
+build/
+dist/
+*.exe
+*.rar
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+env/
+
+# Sistema / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs / temporales
+*.log
+*.tmp
+*.bak
