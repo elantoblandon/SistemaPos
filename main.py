@@ -13,6 +13,7 @@ from modules.dashboard import DashboardFrame
 import os
 import shutil
 import datetime
+import sys
 
 class App(ctk.CTk):
     def __init__(self):
@@ -34,6 +35,38 @@ class App(ctk.CTk):
         self.main_container.pack(fill="both", expand=True)
 
         self.mostrar_login()
+
+    def ruta_base_app(self):
+        if getattr(sys, "frozen", False):
+            return os.path.dirname(sys.executable)
+        return os.path.dirname(os.path.abspath(__file__))
+
+    def leer_archivo_app(self, nombre_archivo, default=""):
+        rutas = [
+            os.path.join(self.ruta_base_app(), nombre_archivo),
+            os.path.join(getattr(sys, "_MEIPASS", self.ruta_base_app()), nombre_archivo),
+        ]
+        for ruta in rutas:
+            try:
+                if os.path.exists(ruta):
+                    with open(ruta, "r", encoding="utf-8") as archivo:
+                        return archivo.read().strip()
+            except Exception:
+                pass
+        return default
+
+    def obtener_version_app(self):
+        return self.leer_archivo_app("version.txt", "1.0.0").splitlines()[0].strip() or "1.0.0"
+
+    def obtener_notas_actualizacion(self):
+        notas = self.leer_archivo_app("UPDATE_NOTES.md", "")
+        if notas:
+            return notas
+        return (
+            f"Novedades de la version {self.obtener_version_app()}\n\n"
+            "- Se instalaron mejoras del sistema.\n"
+            "- La base de datos del cliente se conserva intacta."
+        )
 
     def crear_backup(self):
         try:
@@ -151,6 +184,7 @@ class App(ctk.CTk):
         self.btn_salir.pack(side="bottom", pady=20)
 
         self.cambiar_vista("pos")
+        self.after(500, self.mostrar_novedades_si_corresponde)
 
     def crear_boton_menu(self, texto, comando):
         btn = ctk.CTkButton(
@@ -178,6 +212,106 @@ class App(ctk.CTk):
                 self.login.actualizar_textos(negocio)
         except Exception as e:
             print(f"Error actualizando branding: {e}")
+
+    def mostrar_novedades_si_corresponde(self):
+        try:
+            version_actual = self.obtener_version_app()
+            version_vista = self.db.obtener_configuracion("ultima_version_novedades", "")
+            if version_vista == version_actual:
+                return
+            self.mostrar_modal_novedades(version_actual, self.obtener_notas_actualizacion())
+        except Exception as e:
+            print(f"Error mostrando novedades: {e}")
+
+    def mostrar_modal_novedades(self, version, notas):
+        modal = ctk.CTkToplevel(self)
+        modal.title(f"Novedades {version}")
+        modal.geometry("620x500")
+        modal.minsize(560, 440)
+        modal.configure(fg_color=COLOR_FONDO_CONTENIDO)
+        modal.transient(self)
+        modal.grab_set()
+        modal.lift()
+
+        try:
+            modal.attributes("-alpha", 0.97)
+        except Exception:
+            pass
+
+        self.update_idletasks()
+        x = self.winfo_x() + int((self.winfo_width() - 620) / 2)
+        y = self.winfo_y() + int((self.winfo_height() - 500) / 2)
+        modal.geometry(f"620x500+{max(x, 0)}+{max(y, 0)}")
+
+        contenedor = ctk.CTkFrame(
+            modal,
+            fg_color=COLOR_TARJETAS,
+            corner_radius=18,
+            border_width=1,
+            border_color=COLOR_BORDE
+        )
+        contenedor.pack(fill="both", expand=True, padx=18, pady=18)
+
+        header = ctk.CTkFrame(contenedor, fg_color="transparent")
+        header.pack(fill="x", padx=22, pady=(22, 8))
+
+        logo_img = cargar_logo_ctk(self.db, size=(58, 58))
+        if logo_img:
+            modal.logo_img = logo_img
+            ctk.CTkLabel(header, image=modal.logo_img, text="").pack(side="left", padx=(0, 14))
+
+        titulo_frame = ctk.CTkFrame(header, fg_color="transparent")
+        titulo_frame.pack(side="left", fill="x", expand=True)
+
+        ctk.CTkLabel(
+            titulo_frame,
+            text=f"Actualizacion instalada v{version}",
+            font=FUERTE_SUBTITULO,
+            text_color=COLOR_ACENTO,
+            anchor="w"
+        ).pack(fill="x")
+
+        ctk.CTkLabel(
+            titulo_frame,
+            text="Estas son las mejoras disponibles desde ahora.",
+            font=FUERTE_TEXTO,
+            text_color=COLOR_TEXTO_SECUNDARIO,
+            anchor="w"
+        ).pack(fill="x", pady=(4, 0))
+
+        notas_box = ctk.CTkTextbox(
+            contenedor,
+            fg_color=COLOR_FONDO_CONTENIDO,
+            border_width=1,
+            border_color=COLOR_BORDE,
+            text_color=COLOR_TEXTO_PRINCIPAL,
+            font=("Inter", 13),
+            wrap="word"
+        )
+        notas_box.pack(fill="both", expand=True, padx=22, pady=(10, 18))
+        notas_box.insert("1.0", notas)
+        notas_box.configure(state="disabled")
+
+        footer = ctk.CTkFrame(contenedor, fg_color="transparent")
+        footer.pack(fill="x", padx=22, pady=(0, 22))
+
+        def cerrar():
+            self.db.guardar_configuracion("ultima_version_novedades", version)
+            modal.destroy()
+
+        ctk.CTkButton(
+            footer,
+            text="Entendido",
+            fg_color=COLOR_ACENTO,
+            hover_color=COLOR_PRIMARIO,
+            text_color="#000000",
+            font=FUERTE_TEXTO_BOLD,
+            height=42,
+            command=cerrar
+        ).pack(side="right")
+
+        modal.protocol("WM_DELETE_WINDOW", cerrar)
+        modal.bind("<Escape>", lambda _e: cerrar())
 
     def mostrar_modal_clave_dashboard(self):
         resultado = {"ok": False}

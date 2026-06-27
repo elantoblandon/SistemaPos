@@ -5,7 +5,10 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[
+        ('version.txt', '.'),
+        ('UPDATE_NOTES.md', '.'),
+    ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
