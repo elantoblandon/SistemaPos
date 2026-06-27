@@ -3,7 +3,7 @@ from tkinter import messagebox, simpledialog, Listbox
 from styles import *
 import os
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 
@@ -349,6 +349,32 @@ class POSFrame(ctk.CTkFrame):
         )
         self.btn_cierre_caja.pack(fill="x", padx=20, pady=(0, 10))
 
+        self.btn_cierre_fecha = ctk.CTkButton(
+            self.cobro_frame,
+            text="Cierre por fecha",
+            fg_color=COLOR_PRIMARIO,
+            hover_color=COLOR_ACENTO,
+            text_color="#FFFFFF",
+            font=("Inter", 13, "bold"),
+            height=38,
+            command=self.generar_cierre_caja_fecha_pos
+        )
+        self.btn_cierre_fecha.pack(fill="x", padx=20, pady=(0, 10))
+
+        self.btn_cierre_semana = ctk.CTkButton(
+            self.cobro_frame,
+            text="Cierre ultimos 7 dias",
+            fg_color=COLOR_TARJETAS,
+            hover_color=COLOR_HOVER,
+            border_width=1,
+            border_color=COLOR_BORDE,
+            text_color=COLOR_TEXTO_PRINCIPAL,
+            font=("Inter", 13, "bold"),
+            height=38,
+            command=self.generar_cierre_caja_semanal_pos
+        )
+        self.btn_cierre_semana.pack(fill="x", padx=20, pady=(0, 10))
+
         self.btn_cobrar = ctk.CTkButton(
             self.cobro_frame,
             text="COBRAR (F5)",
@@ -395,6 +421,88 @@ class POSFrame(ctk.CTkFrame):
             )
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo generar el cierre de caja:\n{e}")
+
+    def parsear_fecha_cierre(self, texto):
+        texto = str(texto or "").strip()
+        for formato in ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(texto, formato).date()
+            except ValueError:
+                continue
+        return None
+
+    def ejecutar_cierre_cajero(self, datos_cierre, mensaje_sin_datos, titulo_pdf):
+        if not datos_cierre:
+            messagebox.showwarning("Sin datos", mensaje_sin_datos)
+            return
+
+        resumen = self.calcular_resumen_cierre(datos_cierre)
+
+        try:
+            ruta_pdf = self.generar_pdf_cierre(datos_cierre, resumen, titulo_pdf=titulo_pdf)
+            self.abrir_archivo(ruta_pdf)
+            messagebox.showinfo(
+                "Cierre generado",
+                f"{titulo_pdf} generado correctamente.\n\n"
+                f"Total vendido: {formato_moneda(resumen['total'])}\n"
+                f"Tickets: {resumen['tickets']}\n"
+                f"Productos: {resumen['productos']}\n"
+                f"Ganancia: {formato_moneda(resumen['ganancia'])}"
+            )
+        except ImportError:
+            messagebox.showerror(
+                "Falta libreria",
+                "Para generar el cierre en PDF debes instalar reportlab:\n\npip install reportlab"
+            )
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo generar el cierre de caja:\n{e}")
+
+    def generar_cierre_caja_fecha_pos(self):
+        if not hasattr(self.db, "obtener_datos_cierre_fecha"):
+            messagebox.showerror("Funcion no disponible", "No existe la funcion de cierre por fecha.")
+            return
+
+        texto_fecha = ctk.CTkInputDialog(
+            text="Fecha del cierre (DD/MM/AAAA):",
+            title="Cierre por fecha"
+        ).get_input()
+
+        if texto_fecha is None:
+            return
+
+        fecha = self.parsear_fecha_cierre(texto_fecha)
+        if not fecha:
+            messagebox.showwarning("Fecha invalida", "Escribe la fecha en formato DD/MM/AAAA.")
+            return
+
+        if fecha > datetime.now().date():
+            messagebox.showwarning("Fecha no valida", "No puedes generar un cierre de una fecha futura.")
+            return
+
+        fecha_iso = fecha.strftime("%Y-%m-%d")
+        fecha_txt = fecha.strftime("%d/%m/%Y")
+        datos_cierre = self.db.obtener_datos_cierre_fecha(fecha_iso)
+        self.ejecutar_cierre_cajero(
+            datos_cierre,
+            f"No hay ventas registradas para el dia {fecha_txt}.",
+            f"CIERRE DE CAJA {fecha_txt}"
+        )
+
+    def generar_cierre_caja_semanal_pos(self):
+        if not hasattr(self.db, "obtener_datos_cierre_rango"):
+            messagebox.showerror("Funcion no disponible", "No existe la funcion de cierre semanal.")
+            return
+
+        datos_cierre = self.db.obtener_datos_cierre_rango(7)
+        ahora = datetime.now()
+        inicio = (ahora - timedelta(days=6)).strftime("%d/%m/%Y")
+        fin = ahora.strftime("%d/%m/%Y")
+
+        self.ejecutar_cierre_cajero(
+            datos_cierre,
+            "No hay ventas registradas en los ultimos 7 dias.",
+            f"CIERRE SEMANAL {inicio} - {fin}"
+        )
 
     def calcular_resumen_cierre(self, datos_cierre):
         """Calcula total, tickets, productos y ganancia usando los tickets del cierre."""
@@ -453,7 +561,7 @@ class POSFrame(ctk.CTkFrame):
 
         return list(agrupados.values())
 
-    def generar_pdf_cierre(self, datos_cierre, resumen):
+    def generar_pdf_cierre(self, datos_cierre, resumen, titulo_pdf="CIERRE DE CAJA"):
         """Genera PDF compacto del cierre de caja desde el POS."""
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import letter
@@ -505,7 +613,7 @@ class POSFrame(ctk.CTkFrame):
         nombre_negocio = str(negocio.get("nombre_establecimiento", "PlanetBoxer")).upper()
 
         elementos.append(Paragraph(nombre_negocio, titulo_style))
-        elementos.append(Paragraph("CIERRE DE CAJA", subtitulo_style))
+        elementos.append(Paragraph(titulo_pdf, subtitulo_style))
         elementos.append(Paragraph(f"Fecha: {ahora.strftime('%d/%m/%Y %H:%M')}", normal_style))
         elementos.append(Spacer(1, 6))
 
