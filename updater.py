@@ -62,6 +62,13 @@ def load_config(base):
     }
 
     if not path.exists():
+        bundled_path = Path(getattr(sys, "_MEIPASS", base)) / CONFIG_FILE
+        if bundled_path.exists():
+            try:
+                data = json.loads(bundled_path.read_text(encoding="utf-8"))
+                default.update(data if isinstance(data, dict) else {})
+            except Exception:
+                pass
         path.write_text(json.dumps(default, indent=2), encoding="utf-8")
         return default
 
